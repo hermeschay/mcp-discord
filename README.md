@@ -3,6 +3,12 @@
 
 A Discord MCP (Model Context Protocol) server that enables AI assistants to interact with the Discord platform.
 
+> [!NOTE]
+> **This is a fork of [barryyip0625/mcp-discord](https://github.com/barryyip0625/mcp-discord).**
+> It adds robustness fixes for running the stdio server under a long-lived agent gateway: stderr-only diagnostics (no JSON-RPC stream corruption), a clean bounded shutdown on SIGINT/SIGTERM/stdin-close, and crash-resilience handlers for Discord client and process errors.
+>
+> The badges and the **npm / Docker / Smithery install instructions below point at the upstream project and do _not_ include this fork's changes.** To run this fork, build from source (`git clone` this repository, then `npm install && npm run build`) and launch `build/index.js` directly — see [Manual Installation](#manual-installation) below.
+
 <a href="https://glama.ai/mcp/servers/@barryyip0625/mcp-discord">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@barryyip0625/mcp-discord/badge" alt="MCP-Discord MCP server" />
 </a>
