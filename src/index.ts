@@ -64,6 +64,12 @@ const client = new Client({
     ]
 });
 
+// discord.js Client is an EventEmitter: an unhandled 'error' event throws and
+// would take the whole process down. Over a long-lived gateway connection
+// transient WS/network errors are expected, so log them and keep running.
+client.on('error', (err) => error('Discord client error: ' + String(err)));
+client.on('shardError', (err) => error('Discord shard error: ' + String(err)));
+
 // Save token to client for login handler
 if (config.DISCORD_TOKEN) {
     client.token = config.DISCORD_TOKEN;
@@ -149,6 +155,18 @@ try {
     // plain EOF surfaces as 'end'. Handle both; shutdown() is idempotent.
     process.stdin.on('close', () => shutdown('stdin close'));
     process.stdin.on('end', () => shutdown('stdin end'));
+
+    // A stray promise rejection shouldn't be fatal for a long-lived server: log
+    // and keep running.
+    process.on('unhandledRejection', (reason) =>
+        error('Unhandled promise rejection: ' + String(reason)));
+    // An uncaught exception leaves process state undefined, so tear down cleanly
+    // (clear timers, destroy the client) and exit rather than continue in a bad
+    // state — the supervising gateway can then restart us.
+    process.on('uncaughtException', (err) => {
+        error('Uncaught exception: ' + String(err));
+        shutdown('uncaughtException');
+    });
 
     // Keep the Node.js process running
     if (config.TRANSPORT.toLowerCase() === 'http') {
