@@ -20,7 +20,7 @@ const config = {
                 if (typeof configArg === 'string') {
                     try {
                         const parsedConfig = JSON.parse(configArg);
-                        return parsedConfig.DISCORD_TOKEN;
+                        return parsedConfig.DISCORD_TOKEN ?? parsedConfig.discordToken;
                     } catch (err) {
                         // If not valid JSON, try using the string directly
                         return configArg;
@@ -47,9 +47,8 @@ const config = {
         // Check for port argument
         const portIndex = process.argv.indexOf('--port');
         if (portIndex !== -1 && portIndex + 1 < process.argv.length) {
-            return parseInt(process.argv[portIndex + 1]);
+            return parseInt(process.argv[portIndex + 1], 10);
         }
-        // Default port for MCP
         return 8080;
     })()
 };
@@ -109,14 +108,11 @@ const initializeTransport = () => {
     }
 };
 
-// Start auto-login process
-await autoLogin();
-
-// Create and start MCP server with selected transport
-const transport = initializeTransport();
-const mcpServer = new DiscordMCPServer(client, transport);
-
+// Construct the transport inside the startup error boundary.
 try {
+    const transport = initializeTransport();
+    await autoLogin();
+    const mcpServer = new DiscordMCPServer(client, transport);
     await mcpServer.start();
     info('MCP server started successfully');
     
@@ -128,7 +124,7 @@ try {
     let heartbeat: NodeJS.Timeout | null = null;
     let shuttingDown = false;
 
-    const shutdown = async (reason: string) => {
+    const shutdown = async (reason: string, exitCode = 0) => {
         if (shuttingDown) return;            // idempotent
         shuttingDown = true;
         error(`Shutting down (${reason})...`);
@@ -136,7 +132,7 @@ try {
         // Bounded: if graceful close stalls (e.g. a hung Discord WS), force exit.
         const force = setTimeout(() => {
             error('Graceful shutdown timed out; forcing exit.');
-            process.exit(0);
+            process.exit(exitCode || 1);
         }, 3000);
         force.unref();                       // don't let the backstop itself pin the loop
 
@@ -145,8 +141,9 @@ try {
             await mcpServer.stop();          // clears health interval, closes transport, destroys client
         } catch (err) {
             error('Error during shutdown: ' + String(err));
+            exitCode ||= 1;
         }
-        process.exit(0);
+        process.exit(exitCode);
     };
 
     process.on('SIGINT', () => shutdown('SIGINT'));
@@ -165,7 +162,7 @@ try {
     // state — the supervising gateway can then restart us.
     process.on('uncaughtException', (err) => {
         error('Uncaught exception: ' + String(err));
-        shutdown('uncaughtException');
+        shutdown('uncaughtException', 1);
     });
 
     // Keep the Node.js process running
@@ -179,5 +176,10 @@ try {
     }
 } catch (err) {
     error('Failed to start MCP server: ' + String(err));
+    try {
+        await client.destroy();
+    } catch (destroyErr) {
+        error('Error destroying Discord client after startup failure: ' + String(destroyErr));
+    }
     process.exit(1);
 }
