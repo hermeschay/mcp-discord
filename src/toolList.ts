@@ -1,4 +1,58 @@
-export const toolList = [
+type ToolSafetyAnnotations = {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  openWorldHint: boolean;
+};
+
+const READ_ONLY_TOOLS = new Set([
+  "discord_get_forum_channels",
+  "discord_get_forum_post",
+  "discord_list_forum_threads",
+  "discord_read_messages",
+  "discord_get_server_info",
+  "discord_get_reaction_users",
+  "discord_get_forum_tags",
+  "discord_list_servers",
+  "discord_search_messages",
+  "discord_list_roles",
+  "discord_list_members",
+  "discord_get_member"
+]);
+
+const DESTRUCTIVE_TOOLS = new Set([
+  "discord_edit_category",
+  "discord_delete_category",
+  "discord_edit_channel",
+  "discord_delete_channel",
+  "discord_remove_reaction",
+  "discord_delete_forum_post",
+  "discord_set_forum_tags",
+  "discord_update_forum_post",
+  "discord_edit_message",
+  "discord_delete_message",
+  "discord_edit_webhook",
+  "discord_delete_webhook",
+  "discord_edit_role",
+  "discord_delete_role",
+  "discord_remove_role",
+  "discord_set_channel_permissions",
+  "discord_remove_channel_permissions"
+]);
+
+function safetyAnnotationsFor(name: string): ToolSafetyAnnotations {
+  const readOnly = READ_ONLY_TOOLS.has(name);
+  return {
+    readOnlyHint: readOnly,
+    destructiveHint: DESTRUCTIVE_TOOLS.has(name),
+    // Conservative by design: read operations are safe to retry. Mutating tools
+    // stay false even when Discord may de-duplicate a particular request.
+    idempotentHint: readOnly,
+    openWorldHint: true
+  };
+}
+
+const baseToolList = [
   {
     name: "discord_create_category",
     description: "Creates a new category in a Discord server.",
@@ -612,4 +666,9 @@ export const toolList = [
       required: ["channelId", "roleId"]
     }
   }
-]; 
+];
+
+export const toolList = baseToolList.map((tool) => ({
+  ...tool,
+  annotations: safetyAnnotationsFor(tool.name)
+}));

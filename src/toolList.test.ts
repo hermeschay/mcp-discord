@@ -187,3 +187,82 @@ describe('toolList', () => {
     expect(names.length).toBe(uniqueNames.length);
   });
 });
+
+const READ_ONLY_TOOLS = new Set([
+  'discord_get_forum_channels',
+  'discord_get_forum_post',
+  'discord_list_forum_threads',
+  'discord_read_messages',
+  'discord_get_server_info',
+  'discord_get_reaction_users',
+  'discord_get_forum_tags',
+  'discord_list_servers',
+  'discord_search_messages',
+  'discord_list_roles',
+  'discord_list_members',
+  'discord_get_member'
+]);
+
+const DESTRUCTIVE_TOOLS = new Set([
+  'discord_edit_category',
+  'discord_delete_category',
+  'discord_edit_channel',
+  'discord_delete_channel',
+  'discord_remove_reaction',
+  'discord_delete_forum_post',
+  'discord_set_forum_tags',
+  'discord_update_forum_post',
+  'discord_edit_message',
+  'discord_delete_message',
+  'discord_edit_webhook',
+  'discord_delete_webhook',
+  'discord_edit_role',
+  'discord_delete_role',
+  'discord_remove_role',
+  'discord_set_channel_permissions',
+  'discord_remove_channel_permissions'
+]);
+
+describe('Discord MCP tool safety annotations', () => {
+  it('annotates every tool exactly once', () => {
+    const names = toolList.map((tool) => tool.name);
+
+    expect(toolList).toHaveLength(43);
+    expect(new Set(names)).toHaveProperty('size', 43);
+    for (const tool of toolList) {
+      expect(tool.annotations).toEqual({
+        readOnlyHint: expect.any(Boolean),
+        destructiveHint: expect.any(Boolean),
+        idempotentHint: expect.any(Boolean),
+        openWorldHint: true
+      });
+    }
+  });
+
+  it('marks only non-mutating queries as read-only and retry-safe', () => {
+    for (const tool of toolList) {
+      const expectedReadOnly = READ_ONLY_TOOLS.has(tool.name);
+      expect(tool.annotations.readOnlyHint).toBe(expectedReadOnly);
+      expect(tool.annotations.idempotentHint).toBe(expectedReadOnly);
+      if (expectedReadOnly) {
+        expect(tool.annotations.destructiveHint).toBe(false);
+      }
+    }
+  });
+
+  it('distinguishes additive writes from destructive edits, removals, and deletes', () => {
+    for (const tool of toolList) {
+      expect(tool.annotations.destructiveHint).toBe(DESTRUCTIVE_TOOLS.has(tool.name));
+    }
+
+    expect(toolList.find((tool) => tool.name === 'discord_send')?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false
+    });
+    expect(toolList.find((tool) => tool.name === 'discord_create_role')?.annotations.destructiveHint).toBe(false);
+    expect(toolList.find((tool) => tool.name === 'discord_remove_role')?.annotations.destructiveHint).toBe(true);
+    expect(toolList.find((tool) => tool.name === 'discord_edit_channel')?.annotations.destructiveHint).toBe(true);
+    expect(toolList.find((tool) => tool.name === 'discord_delete_channel')?.annotations.destructiveHint).toBe(true);
+  });
+});
